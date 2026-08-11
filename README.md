@@ -14,16 +14,12 @@ You'll paste this into the app's **Settings** tab once it's running. It's stored
 
 **Security note:** because this app calls the Claude API directly from the browser (no backend), your API key is visible in your browser's network/dev tools while the app runs. That's fine for a private app only you use on your own phone, but don't share the deployed URL or your phone's browser session with anyone else.
 
-## 2. Get a GitHub account and push this repo
+## 2. Push this repo to GitHub
 
-1. Sign up at https://github.com/signup if you don't have an account.
-2. Create a new empty repository, e.g. named `food-tracker` (don't initialize it with a README).
-3. From this folder, run:
+1. Create a new empty repository on GitHub, e.g. named `food-tracker` (don't initialize it with a README).
+2. This folder already has a local git repo with a commit. From this folder, run:
 
 ```bash
-git init
-git add .
-git commit -m "Initial food tracker app"
 git branch -M main
 git remote add origin https://github.com/<your-username>/food-tracker.git
 git push -u origin main
