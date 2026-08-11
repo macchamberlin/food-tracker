@@ -40,7 +40,11 @@ git push -u origin main
 
 ## Logging food
 
-On the **Log** tab, type or tap your phone keyboard's microphone icon to dictate a description (e.g. "two eggs and toast with butter"), then **Log it**. Claude estimates calories/protein/carbs/fat; review and edit the numbers on the confirm screen, then **Save**.
+On the **Log** tab, type or tap your phone keyboard's microphone icon to dictate a description (e.g. "two eggs and toast with butter"), then **Log it**. Claude estimates calories/protein/carbs/fat and it's saved immediately — no extra confirmation step. If the API call fails (bad/missing key, offline, etc.) you'll get a manual entry form instead, so logging never dead-ends.
+
+The **Today** tab shows a live ticking timer for how long it's been since your last meal, plus how long until your eating window opens or closes.
+
+The **History** tab shows calorie, protein, and hours-fasted trends as bar charts for your last 14 days, with a dashed line marking your target for each, plus a day-by-day list below.
 
 ## How the daily score works
 

@@ -166,9 +166,44 @@ textarea { resize: vertical; }
 
 .bar-fill.protein { background: #4a90d9; }
 
-.fasting-card { display: flex; flex-direction: column; gap: 2px; }
+.fasting-card { display: flex; flex-direction: column; gap: 4px; }
 .fasting-card.in-window { border-color: var(--primary-light); }
 .fasting-card.fasting { border-color: #d9a24a; }
+
+.fasting-timer {
+  font-size: 1.4rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.toast {
+  background: var(--primary);
+  color: white;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  font-size: 0.9rem;
+}
+
+.chart-block { margin-bottom: 16px; }
+.chart-block:last-of-type { margin-bottom: 6px; }
+
+.chart-label {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.chart-svg {
+  width: 100%;
+  height: 60px;
+  display: block;
+}
+
+.chart-range {
+  text-align: center;
+  font-size: 0.8rem;
+}
 
 .entry-list {
   list-style: none;

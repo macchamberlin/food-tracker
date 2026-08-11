@@ -85,6 +85,23 @@ export function getAllDayKeysSorted() {
   return Object.keys(logs).sort((a, b) => (a < b ? 1 : -1));
 }
 
+export function previousDayKey(dateKey) {
+  const [y, m, d] = dateKey.split('-').map(Number);
+  return todayKey(new Date(y, m - 1, d - 1));
+}
+
+// Most recent entry across all days, regardless of whether it was logged today or
+// earlier — needed so the fasting timer doesn't reset to "no meals" right after midnight.
+export function getMostRecentEntry() {
+  for (const key of getAllDayKeysSorted()) {
+    const entries = getDayEntries(key);
+    if (entries.length) {
+      return entries.reduce((latest, e) => (e.timestamp > latest.timestamp ? e : latest));
+    }
+  }
+  return null;
+}
+
 export function clearAllData() {
   localStorage.removeItem(LOGS_KEY);
   localStorage.removeItem(SETTINGS_KEY);

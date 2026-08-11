@@ -19,17 +19,12 @@ export function isWithinWindow(date, windowStart, windowEnd) {
   return now >= start || now < end; // wraps past midnight
 }
 
-export function getFastingStatus(now, settings, todayEntries) {
+export function getFastingStatus(now, settings, lastEntryTimestamp) {
   const { windowStart, windowEnd } = settings;
   const inWindow = isWithinWindow(now, windowStart, windowEnd);
 
-  let hoursSinceLastMeal = null;
-  if (todayEntries.length > 0) {
-    const last = todayEntries.reduce((latest, e) =>
-      e.timestamp > latest.timestamp ? e : latest
-    );
-    hoursSinceLastMeal = (now.getTime() - last.timestamp) / 3600000;
-  }
+  const hoursSinceLastMeal =
+    lastEntryTimestamp != null ? (now.getTime() - lastEntryTimestamp) / 3600000 : null;
 
   const start = toMinutes(windowStart);
   const end = toMinutes(windowEnd);
@@ -58,4 +53,31 @@ export function formatHours(h) {
   const whole = Math.floor(h);
   const mins = Math.round((h - whole) * 60);
   return mins > 0 ? `${whole}h ${mins}m` : `${whole}h`;
+}
+
+// HH:MM:SS ticking display for the live fasting timer.
+export function formatDuration(hours) {
+  const totalSeconds = Math.max(0, Math.round(hours * 3600));
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${h}:${pad(m)}:${pad(s)}`;
+}
+
+export function windowLengthHours(windowStart, windowEnd) {
+  const start = toMinutes(windowStart);
+  const end = toMinutes(windowEnd);
+  const diff = end > start ? end - start : end + 1440 - start;
+  return diff / 60;
+}
+
+// How long the fast lasted between the previous day's last meal and this day's first —
+// the classic "16 hours fasted" stat. Returns null if either day has no logged entries.
+export function fastedHoursBeforeFirstMeal(todayEntries, prevDayEntries) {
+  if (!todayEntries?.length || !prevDayEntries?.length) return null;
+  const firstToday = Math.min(...todayEntries.map((e) => e.timestamp));
+  const lastPrev = Math.max(...prevDayEntries.map((e) => e.timestamp));
+  const hours = (firstToday - lastPrev) / 3600000;
+  return hours > 0 ? hours : null;
 }

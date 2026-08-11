@@ -5,16 +5,26 @@ import {
   addEntry,
   deleteEntry,
   getAllDayKeysSorted,
+  getMostRecentEntry,
+  previousDayKey,
   clearAllData,
   todayKey,
   makeEntryId,
 } from './storage.js';
 import { parseFoodDescription, NutritionApiError } from './api.js';
-import { getFastingStatus, formatHours } from './fasting.js';
+import {
+  getFastingStatus,
+  formatHours,
+  formatDuration,
+  windowLengthHours,
+  fastedHoursBeforeFirstMeal,
+} from './fasting.js';
 import { dailyScore } from './scoring.js';
 
 const app = document.getElementById('app');
-let draft = null; // parsed-but-unsaved nutrition result, held between Log and its confirm step
+let draft = null; // manual-entry values, only populated when automatic parsing fails
+let toast = null; // one-shot success banner shown on the next Today render
+let fastingTimerId = null;
 
 function escapeHtml(str) {
   const div = document.createElement('div');
@@ -37,6 +47,7 @@ window.addEventListener('DOMContentLoaded', render);
 function render() {
   const screen = currentScreen();
   draft = screen === 'log' ? draft : null;
+  stopFastingTimer();
 
   if (screen === 'log') app.innerHTML = renderLog();
   else if (screen === 'today') app.innerHTML = renderToday();
@@ -48,6 +59,8 @@ function render() {
   });
 
   attachHandlers(screen);
+
+  if (screen === 'today') startFastingTimer();
 }
 
 // ---------- LOG screen ----------
@@ -56,7 +69,7 @@ function renderLog() {
   if (draft) {
     return `
       <section class="screen">
-        <h1>Confirm entry</h1>
+        <h1>Enter manually</h1>
         <p class="muted">${escapeHtml(draft.confidence_note || '')}</p>
         <form id="confirm-form" class="card form">
           <label>Food<input type="text" name="food_name" value="${escapeHtml(draft.food_name)}" required></label>
@@ -93,7 +106,11 @@ function renderToday() {
   const key = todayKey();
   const entries = getDayEntries(key);
   const result = dailyScore(entries, settings);
-  const status = getFastingStatus(new Date(), settings, entries);
+  const lastEntry = getMostRecentEntry();
+  const status = getFastingStatus(new Date(), settings, lastEntry?.timestamp ?? null);
+
+  const flash = toast;
+  toast = null;
 
   const entryRows = entries
     .slice()
@@ -114,6 +131,7 @@ function renderToday() {
   return `
     <section class="screen">
       <h1>Today</h1>
+      ${flash ? `<div class="toast">${escapeHtml(flash)}</div>` : ''}
       <div class="card score-card">
         <div class="score-number">${result.score}</div>
         <div class="score-label">Daily score</div>
@@ -131,9 +149,9 @@ function renderToday() {
         <div class="bar"><div class="bar-fill protein" style="width:${Math.min(100, (result.totals.protein_g / settings.proteinTarget) * 100)}%"></div></div>
       </div>
 
-      <div class="card fasting-card ${status.inWindow ? 'in-window' : 'fasting'}">
-        <div>${status.label}</div>
-        ${status.hoursSinceLastMeal !== null ? `<div class="muted">Last ate ${formatHours(status.hoursSinceLastMeal)} ago</div>` : ''}
+      <div id="fasting-card" class="card fasting-card ${status.inWindow ? 'in-window' : 'fasting'}">
+        <div id="fasting-window-label">${status.label}</div>
+        <div id="fasting-elapsed" class="fasting-timer">${status.hoursSinceLastMeal !== null ? `${formatDuration(status.hoursSinceLastMeal)} since last meal` : 'No meals logged yet'}</div>
       </div>
 
       <h2>Entries</h2>
@@ -141,25 +159,104 @@ function renderToday() {
     </section>`;
 }
 
+function startFastingTimer() {
+  const settings = getSettings();
+  const lastEntry = getMostRecentEntry();
+  const lastTimestamp = lastEntry?.timestamp ?? null;
+
+  const tick = () => {
+    const card = document.getElementById('fasting-card');
+    if (!card) {
+      stopFastingTimer();
+      return;
+    }
+    const status = getFastingStatus(new Date(), settings, lastTimestamp);
+    card.classList.toggle('in-window', status.inWindow);
+    card.classList.toggle('fasting', !status.inWindow);
+    document.getElementById('fasting-window-label').textContent = status.label;
+    document.getElementById('fasting-elapsed').textContent =
+      status.hoursSinceLastMeal !== null
+        ? `${formatDuration(status.hoursSinceLastMeal)} since last meal`
+        : 'No meals logged yet';
+  };
+
+  fastingTimerId = setInterval(tick, 1000);
+}
+
+function stopFastingTimer() {
+  if (fastingTimerId) {
+    clearInterval(fastingTimerId);
+    fastingTimerId = null;
+  }
+}
+
 // ---------- HISTORY screen ----------
+
+function dayStats(key, settings) {
+  const entries = getDayEntries(key);
+  const result = dailyScore(entries, settings);
+  const fastedHours = fastedHoursBeforeFirstMeal(entries, getDayEntries(previousDayKey(key)));
+  return { key, result, fastedHours };
+}
+
+function sparkBarChart({ label, values, target, color }) {
+  const width = 320;
+  const height = 60;
+  const gap = 4;
+  const n = values.length;
+  const barWidth = (width - gap * (n - 1)) / n;
+  const maxVal = Math.max(target || 0, ...values.map((v) => v ?? 0), 1) * 1.15;
+  const targetY = height - (Math.min(target || 0, maxVal) / maxVal) * height;
+
+  const bars = values
+    .map((v, i) => {
+      if (v == null) return '';
+      const h = (v / maxVal) * height;
+      const x = i * (barWidth + gap);
+      const y = height - h;
+      return `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barWidth.toFixed(1)}" height="${h.toFixed(1)}" rx="2" fill="${color}"></rect>`;
+    })
+    .join('');
+
+  const targetLine = target
+    ? `<line x1="0" y1="${targetY.toFixed(1)}" x2="${width}" y2="${targetY.toFixed(1)}" stroke="var(--muted)" stroke-dasharray="3,3" stroke-width="1"></line>`
+    : '';
+
+  return `
+    <div class="chart-block">
+      <div class="chart-label">${label}</div>
+      <svg viewBox="0 0 ${width} ${height}" class="chart-svg" preserveAspectRatio="none">${targetLine}${bars}</svg>
+    </div>`;
+}
 
 function renderHistory() {
   const settings = getSettings();
-  const keys = getAllDayKeysSorted();
+  const keys = getAllDayKeysSorted(); // newest first
 
   if (!keys.length) {
     return `<section class="screen"><h1>History</h1><p class="muted">No days logged yet.</p></section>`;
   }
 
+  const chartKeys = keys.slice(0, 14).slice().reverse(); // oldest -> newest, most recent 14
+  const chartStats = chartKeys.map((key) => dayStats(key, settings));
+  const fastedTarget = Math.max(0, 24 - windowLengthHours(settings.windowStart, settings.windowEnd));
+
+  const chartsHtml = `
+    <div class="card">
+      ${sparkBarChart({ label: 'Calories', values: chartStats.map((d) => d.result.totals.calories), target: settings.calorieTarget, color: 'var(--primary-light)' })}
+      ${sparkBarChart({ label: 'Protein (g)', values: chartStats.map((d) => d.result.totals.protein_g), target: settings.proteinTarget, color: '#4a90d9' })}
+      ${sparkBarChart({ label: 'Hours fasted', values: chartStats.map((d) => d.fastedHours), target: fastedTarget, color: '#d9a24a' })}
+      <div class="chart-range muted">${chartKeys[0]} → ${chartKeys[chartKeys.length - 1]}</div>
+    </div>`;
+
   const rows = keys
     .map((key) => {
-      const entries = getDayEntries(key);
-      const result = dailyScore(entries, settings);
+      const { result, fastedHours } = dayStats(key, settings);
       return `
       <li class="history-row">
         <span class="history-date">${key}</span>
         <span class="history-score">${result.score}</span>
-        <span class="muted">${Math.round(result.totals.calories)} cal · ${Math.round(result.totals.protein_g)}g protein</span>
+        <span class="muted">${Math.round(result.totals.calories)} cal · ${Math.round(result.totals.protein_g)}g protein${fastedHours != null ? ` · ${formatHours(fastedHours)} fasted` : ''}</span>
       </li>`;
     })
     .join('');
@@ -167,6 +264,7 @@ function renderHistory() {
   return `
     <section class="screen">
       <h1>History</h1>
+      ${chartsHtml}
       <ul class="history-list">${rows}</ul>
     </section>`;
 }
@@ -215,6 +313,7 @@ function attachHandlers(screen) {
           fat_g: Number(fd.get('fat_g')) || 0,
         };
         addEntry(entry);
+        toast = `Logged "${entry.food_name}" — ${Math.round(entry.calories)} cal, ${Math.round(entry.protein_g)}g protein`;
         draft = null;
         navigate('today');
       });
@@ -234,9 +333,19 @@ function attachHandlers(screen) {
         submitBtn.disabled = true;
         try {
           const settings = getSettings();
-          const result = await parseFoodDescription(description, settings);
-          draft = result;
-          render();
+          const parsed = await parseFoodDescription(description, settings);
+          const entry = {
+            id: makeEntryId(),
+            timestamp: Date.now(),
+            food_name: parsed.food_name,
+            calories: parsed.calories,
+            protein_g: parsed.protein_g,
+            carbs_g: parsed.carbs_g,
+            fat_g: parsed.fat_g,
+          };
+          addEntry(entry);
+          toast = `Logged "${entry.food_name}" — ${Math.round(entry.calories)} cal, ${Math.round(entry.protein_g)}g protein`;
+          navigate('today');
         } catch (err) {
           const message = err instanceof NutritionApiError ? err.message : 'Something went wrong. Try again.';
           draft = {
