@@ -229,7 +229,17 @@ textarea { resize: vertical; }
   gap: 8px;
 }
 
-.entry-time { color: var(--muted); font-weight: 400; font-size: 0.85rem; white-space: nowrap; }
+.entry-time-input {
+  background: none;
+  border: none;
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.85rem;
+  font-family: inherit;
+  padding: 0;
+  width: auto;
+  white-space: nowrap;
+}
 
 .entry-macros { margin-top: 2px; font-size: 0.85rem; }
 

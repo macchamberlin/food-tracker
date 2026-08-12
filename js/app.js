@@ -3,6 +3,7 @@ import {
   saveSettings,
   getDayEntries,
   addEntry,
+  updateEntry,
   deleteEntry,
   getAllDayKeysSorted,
   getMostRecentEntry,
@@ -30,6 +31,11 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = String(str ?? '');
   return div.innerHTML;
+}
+
+function toTimeValue(timestamp) {
+  const d = new Date(timestamp);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 function currentScreen() {
@@ -114,13 +120,13 @@ function renderToday() {
 
   const entryRows = entries
     .slice()
-    .reverse()
+    .sort((a, b) => b.timestamp - a.timestamp)
     .map(
       (e) => `
       <li class="entry" data-id="${e.id}">
         <div class="entry-main">
           <span class="entry-name">${escapeHtml(e.food_name)}</span>
-          <span class="entry-time">${new Date(e.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</span>
+          <input type="time" class="entry-time-input" data-id="${e.id}" value="${toTimeValue(e.timestamp)}">
         </div>
         <div class="entry-macros muted">${Math.round(e.calories)} cal · ${Math.round(e.protein_g)}g protein</div>
         <button class="delete-entry" data-id="${e.id}" aria-label="Delete">✕</button>
@@ -369,6 +375,19 @@ function attachHandlers(screen) {
     document.querySelectorAll('.delete-entry').forEach((btn) => {
       btn.addEventListener('click', () => {
         deleteEntry(todayKey(), btn.dataset.id);
+        render();
+      });
+    });
+    document.querySelectorAll('.entry-time-input').forEach((input) => {
+      input.addEventListener('change', () => {
+        if (!input.value) return;
+        const key = todayKey();
+        const entry = getDayEntries(key).find((e) => e.id === input.dataset.id);
+        if (!entry) return;
+        const [hours, minutes] = input.value.split(':').map(Number);
+        const updated = new Date(entry.timestamp);
+        updated.setHours(hours, minutes, 0, 0);
+        updateEntry(key, entry.id, { timestamp: updated.getTime() });
         render();
       });
     });
